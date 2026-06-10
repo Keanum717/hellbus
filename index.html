@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>지옥으로 가는 버스 좌석 배정</title>
+    <style>
+        :root {
+            --primary-color: #dc2626;
+            --primary-hover: #991b1b;
+            --bg-color: #111827;
+            --panel-bg: #1f2937;
+            --text-main: #f9fafb;
+            --text-muted: #9ca3af;
+            --border-color: #374151;
+            --seat-empty: #4b5563;
+            --seat-selected: #f87171;
+            --seat-assigned: #7f1d1d;
+            --aisle-color: transparent;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .header {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 100%;
+            max-width: 1200px;
+        }
+
+        @media (min-width: 768px) {
+            .container {
+                flex-direction: row;
+                align-items: flex-start;
+            }
+        }
+
+        .panel {
+            background-color: var(--panel-bg);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            flex: 1;
+        }
+
+        .panel-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        /* 컨트롤 영역 (좌측) */
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 120px;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            resize: vertical;
+            font-size: 14px;
+        }
+
+        .button-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        button {
+            padding: 12px 16px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        button.secondary {
+            background-color: #374151;
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+        }
+
+        button.secondary:hover {
+            background-color: #4b5563;
+        }
+        
+        button.danger {
+            background-color: #7f1d1d;
+        }
+
+        button.danger:hover {
+            background-color: #991b1b;
+        }
+
+        /* 학생 목록 */
+        .student-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .student-badge {
+            padding: 6px 12px;
+            border-radius: 9999px;
+            background-color: #374151;
+            border: 1px solid var(--border-color);
+            font-size: 14px;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.2s;
+        }
+
+        .student-badge.selected {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .student-badge.assigned {
+            background-color: #111827;
+            color: var(--text-muted);
+            text-decoration: line-through;
+            cursor: default;
+        }
+
+        /* 버스 레이아웃 (우측) */
+        .bus-container {
+            display: flex;
+            justify-content: center;
+            background-color: #111827;
+            padding: 20px;
+            border-radius: 12px;
+            border: 2px solid var(--border-color);
+        }
+
+        .bus-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 60px);
+            gap: 10px;
+            background-color: #1f2937;
+            padding: 20px;
+            border-radius: 16px;
+            border: 4px solid #374151;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .seat {
+            width: 60px;
+            height: 60px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            border: 2px solid var(--border-color);
+            background-color: var(--seat-empty);
+            transition: all 0.2s;
+            user-select: none;
+            text-align: center;
+            padding: 2px;
+        }
+
+        .seat.aisle {
+            background-color: var(--aisle-color);
+            border: none;
+            cursor: default;
+        }
+
+        .seat:not(.aisle):hover {
+            border-color: var(--primary-color);
+        }
+
+        .seat.selected {
+            background-color: var(--seat-selected);
+            border-color: var(--primary-color);
+        }
+
+        .seat.assigned {
+            background-color: var(--seat-assigned);
+            color: white;
+            border-color: var(--primary-hover);
+            cursor: default;
+        }
+
+        .seat-number {
+            font-size: 10px;
+            opacity: 0.7;
+            margin-bottom: 2px;
+        }
+
+        .seat-name {
+            font-weight: bold;
+            word-break: keep-all;
+            line-height: 1.2;
+        }
+
+        /* 메시지 박스 */
+        #message-box {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #dc2626;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            z-index: 1000;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .stats {
+            margin-top: 15px;
+            font-size: 14px;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>🔥 지옥으로 가는 버스 좌석 배정 🔥</h1>
+    </div>
+
+    <div id="message-box">알림 메시지</div>
+
+    <div class="container">
+        <!-- 좌측: 설정 및 명단 패널 -->
+        <div class="panel">
+            <div class="panel-title">1. 희생양 명단 입력 및 선택</div>
+            <div class="controls">
+                <textarea id="student-input" placeholder="탑승객 이름을 쉼표(,) 또는 줄바꿈으로 구분하여 입력하세요.&#10;예시:&#10;이종진, 김동천, 김동찬"></textarea>
+                
+                <button onclick="applyStudentList()">명단 적용하기</button>
+                
+                <div class="stats">
+                    <span id="total-count">총 인원: 0명</span>
+                    <span id="assigned-count">배정 완료: 0명</span>
+                </div>
+
+                <div class="student-list" id="student-list-container">
+                    <!-- 학생 목록이 동적으로 생성됨 -->
+                </div>
+
+                <div class="panel-title" style="margin-top: 20px;">2. 운명 결정</div>
+                <div class="button-group">
+                    <button onclick="assignSelectedToSelected()">선택한 대상 ➔ 선택한 지옥석 배정</button>
+                    <button class="secondary" onclick="assignRemainingToRemaining()">남은 대상 ➔ 남은 지옥석 무작위 배정</button>
+                    <button class="danger" onclick="resetAssignments()">모든 배정 초기화</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 우측: 버스 레이아웃 패널 -->
+        <div class="panel">
+            <div class="panel-title">3. 지옥 버스 좌석 지정 (45인승)</div>
+            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">
+                특정 좌석에 고정할 대상과 좌석을 클릭하여 선택한 후 좌측의 [선택한 대상 ➔ 선택한 지옥석 배정] 버튼을 누르세요.
+            </p>
+            <div class="bus-container">
+                <div class="bus-grid" id="bus-grid">
+                    <!-- 좌석이 동적으로 생성됨 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 상태 관리
+        let state = {
+            students: [], // { id, name, assignedSeatId: null, isSelected: false }
+            seats: []     // { id, type: 'seat'|'aisle', assignedStudentId: null, isSelected: false }
+        };
+
+        // 초기화 및 이벤트 리스너 설정
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeBus();
+            renderBus();
+        });
+
+        // 커스텀 알림 메시지 함수
+        function showMessage(msg, duration = 3000) {
+            const msgBox = document.getElementById('message-box');
+            msgBox.textContent = msg;
+            msgBox.style.display = 'block';
+            
+            // 약간의 딜레이 후 opacity 변경으로 페이드인 효과
+            setTimeout(() => { msgBox.style.opacity = '1'; }, 10);
+
+            setTimeout(() => {
+                msgBox.style.opacity = '0';
+                setTimeout(() => { msgBox.style.display = 'none'; }, 300);
+            }, duration);
+        }
+
+        // 45인승 버스 레이아웃 초기화 (10줄 x 4석 + 맨 뒷줄 5석)
+        function initializeBus() {
+            state.seats = [];
+            let seatNumber = 1;
+            const rows = 11;
+            const cols = 5;
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const isLastRow = (r === rows - 1);
+                    const isAisle = (!isLastRow && c === 2); // 맨 뒷줄이 아니면 가운데(인덱스 2)는 통로
+
+                    const seatId = `R${r}C${c}`;
+                    
+                    if (isAisle) {
+                        state.seats.push({
+                            id: seatId,
+                            type: 'aisle',
+                            label: '',
+                            assignedStudentId: null,
+                            isSelected: false
+                        });
+                    } else {
+                        state.seats.push({
+                            id: seatId,
+                            type: 'seat',
+                            label: `${seatNumber}`,
+                            assignedStudentId: null,
+                            isSelected: false
+                        });
+                        seatNumber++;
+                    }
+                }
+            }
+        }
+
+        // 배열 무작위 섞기 (피셔-예이츠 셔플)
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        // 학생 명단 적용
+        function applyStudentList() {
+            const input = document.getElementById('student-input').value;
+            // 쉼표나 줄바꿈으로 분리 후 공백 제거 및 빈 문자열 필터링
+            const names = input.split(/[\n,]+/).map(name => name.trim()).filter(name => name !== '');
+            
+            // 중복 이름 처리 (이름 뒤에 숫자 붙이기)
+            const nameCounts = {};
+            
+            state.students = names.map((name, index) => {
+                let finalName = name;
+                if (nameCounts[name]) {
+                    nameCounts[name]++;
+                    finalName = `${name}(${nameCounts[name]})`;
+                } else {
+                    nameCounts[name] = 1;
+                }
+                
+                return {
+                    id: `S${index}`,
+                    name: finalName,
+                    assignedSeatId: null,
+                    isSelected: false
+                };
+            });
+
+            // 기존 배정 내역 초기화
+            state.seats.forEach(seat => {
+                seat.assignedStudentId = null;
+                seat.isSelected = false;
+            });
+
+            showMessage(`총 ${state.students.length}명의 명단이 적용되었습니다.`);
+            updateUI();
+        }
+
+        // 특정 학생-좌석 수동 배정 (선택된 것들끼리 무작위 매칭)
+        function assignSelectedToSelected() {
+            const selectedStudents = state.students.filter(s => s.isSelected && s.assignedSeatId === null);
+            const selectedSeats = state.seats.filter(s => s.isSelected && s.type === 'seat' && s.assignedStudentId === null);
+
+            if (selectedStudents.length === 0) {
+                showMessage("배정할 학생을 선택해주세요.");
+                return;
+            }
+            if (selectedSeats.length === 0) {
+                showMessage("배정할 좌석을 선택해주세요.");
+                return;
+            }
+            if (selectedStudents.length !== selectedSeats.length) {
+                showMessage(`선택한 학생 수(${selectedStudents.length}명)와 좌석 수(${selectedSeats.length}석)가 다릅니다. 동일하게 맞춰주세요.`);
+                return;
+            }
+
+            // 학생 순서 무작위 섞기
+            const shuffledStudents = shuffleArray([...selectedStudents]);
+
+            // 배정 진행
+            shuffledStudents.forEach((student, index) => {
+                const targetSeat = selectedSeats[index];
+                
+                // 상태 업데이트
+                student.assignedSeatId = targetSeat.id;
+                student.isSelected = false; // 선택 해제
+                
+                const seatInState = state.seats.find(s => s.id === targetSeat.id);
+                seatInState.assignedStudentId = student.id;
+                seatInState.isSelected = false; // 선택 해제
+            });
+
+            showMessage(`${selectedStudents.length}명의 학생이 지정된 좌석 내에 무작위로 배정되었습니다.`);
+            updateUI();
+        }
+
+        // 남은 인원 남은 좌석 무작위 배정
+        function assignRemainingToRemaining() {
+            const unassignedStudents = state.students.filter(s => s.assignedSeatId === null);
+            const emptySeats = state.seats.filter(s => s.type === 'seat' && s.assignedStudentId === null);
+
+            if (unassignedStudents.length === 0) {
+                showMessage("배정할 남은 학생이 없습니다.");
+                return;
+            }
+
+            if (unassignedStudents.length > emptySeats.length) {
+                showMessage(`좌석이 부족합니다. (남은 학생: ${unassignedStudents.length}명, 남은 좌석: ${emptySeats.length}석)`);
+                return;
+            }
+
+            // 남은 좌석 무작위 섞기
+            const shuffledEmptySeats = shuffleArray([...emptySeats]);
+
+            // 배정 진행
+            unassignedStudents.forEach((student, index) => {
+                const targetSeat = shuffledEmptySeats[index];
+                
+                student.assignedSeatId = targetSeat.id;
+                student.isSelected = false;
+                
+                const seatInState = state.seats.find(s => s.id === targetSeat.id);
+                seatInState.assignedStudentId = student.id;
+                seatInState.isSelected = false;
+            });
+
+            showMessage(`남은 ${unassignedStudents.length}명의 학생이 무작위로 배정되었습니다.`);
+            updateUI();
+        }
+
+        // 모든 배정 초기화
+        function resetAssignments() {
+            state.students.forEach(s => {
+                s.assignedSeatId = null;
+                s.isSelected = false;
+            });
+            state.seats.forEach(s => {
+                s.assignedStudentId = null;
+                s.isSelected = false;
+            });
+            showMessage("모든 배정이 초기화되었습니다.");
+            updateUI();
+        }
+
+        // 학생 클릭 토글
+        function toggleStudentSelection(studentId) {
+            const student = state.students.find(s => s.id === studentId);
+            if (!student || student.assignedSeatId !== null) return; // 이미 배정된 학생은 선택 불가
+
+            student.isSelected = !student.isSelected;
+            updateUI();
+        }
+
+        // 좌석 클릭 토글
+        function toggleSeatSelection(seatId) {
+            const seat = state.seats.find(s => s.id === seatId);
+            if (!seat || seat.type === 'aisle' || seat.assignedStudentId !== null) return; // 통로나 이미 배정된 좌석은 선택 불가
+
+            seat.isSelected = !seat.isSelected;
+            updateUI();
+        }
+
+        // 전체 UI 업데이트
+        function updateUI() {
+            renderStudentList();
+            renderBus();
+            updateStats();
+        }
+
+        // 통계 텍스트 업데이트
+        function updateStats() {
+            const total = state.students.length;
+            const assigned = state.students.filter(s => s.assignedSeatId !== null).length;
+            
+            document.getElementById('total-count').textContent = `총 인원: ${total}명`;
+            document.getElementById('assigned-count').textContent = `배정 완료: ${assigned}명`;
+        }
+
+        // 학생 목록 렌더링
+        function renderStudentList() {
+            const container = document.getElementById('student-list-container');
+            container.innerHTML = '';
+
+            state.students.forEach(student => {
+                const badge = document.createElement('div');
+                badge.className = 'student-badge';
+                
+                if (student.assignedSeatId !== null) {
+                    badge.classList.add('assigned');
+                    const assignedSeat = state.seats.find(s => s.id === student.assignedSeatId);
+                    badge.textContent = `${student.name} (${assignedSeat.label}번)`;
+                } else {
+                    badge.textContent = student.name;
+                    if (student.isSelected) {
+                        badge.classList.add('selected');
+                    }
+                    badge.onclick = () => toggleStudentSelection(student.id);
+                }
+
+                container.appendChild(badge);
+            });
+        }
+
+        // 버스 좌석 렌더링
+        function renderBus() {
+            const grid = document.getElementById('bus-grid');
+            grid.innerHTML = '';
+
+            state.seats.forEach(seat => {
+                const seatDiv = document.createElement('div');
+                seatDiv.className = 'seat';
+                
+                if (seat.type === 'aisle') {
+                    seatDiv.classList.add('aisle');
+                } else {
+                    // 좌석 번호 요소
+                    const numSpan = document.createElement('div');
+                    numSpan.className = 'seat-number';
+                    numSpan.textContent = seat.label;
+                    seatDiv.appendChild(numSpan);
+
+                    if (seat.assignedStudentId !== null) {
+                        seatDiv.classList.add('assigned');
+                        const student = state.students.find(s => s.id === seat.assignedStudentId);
+                        
+                        const nameSpan = document.createElement('div');
+                        nameSpan.className = 'seat-name';
+                        nameSpan.textContent = student.name;
+                        seatDiv.appendChild(nameSpan);
+                    } else {
+                        if (seat.isSelected) {
+                            seatDiv.classList.add('selected');
+                        }
+                        seatDiv.onclick = () => toggleSeatSelection(seat.id);
+                    }
+                }
+
+                grid.appendChild(seatDiv);
+            });
+        }
+    </script>
+</body>
+</html>
